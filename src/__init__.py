@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from src.app.route import app_route
+from src.auth.route import auth_route
 app = FastAPI(
     title= "URL shortner",
     description= "Works by reducing the length of any url",
@@ -7,4 +8,4 @@ app = FastAPI(
 )
 
 app.include_router(app_route)
-
+app.include_router(auth_route, prefix="/auth")

@@ -1,0 +1,60 @@
+import redis.asyncio as aioredis
+from src.config.config import Config
+import logging
+
+# Setup logging to see issues in Render logs
+logger = logging.getLogger(__name__)
+
+# JTI_EXPIRY should ideally match your JWT_ACCESS_TOKEN_EXPIRES
+JTI_EXPIRY = 3600 
+
+# Initialize Redis with Connection Pool for efficiency
+token_blocklist = aioredis.Redis(
+    host=Config.REDIS_HOST,
+    port=Config.REDIS_PORT,
+    password=Config.REDIS_PASSWORD,
+    username=Config.REDIS_USER,
+    db=0,
+    decode_responses=True,
+    socket_connect_timeout=10,
+    socket_timeout=10,
+    retry_on_timeout=True,
+    health_check_interval=30
+)
+
+async def add_jti_to_blocklist(jti: str) -> None:
+    try:
+        # We only need to store the key; value can be empty to save memory
+        await token_blocklist.set(name=jti, value="1", ex=JTI_EXPIRY)
+    except Exception as e:
+        logger.error(f"Redis Error (add_jti): {e}")
+
+async def token_in_blocklist(jti: str) -> bool:
+    try:
+        # exists() is faster than get() if you only care if it's there
+        return await token_blocklist.exists(jti) > 0
+    except Exception as e:
+        logger.error(f"Redis Error (check_jti): {e}")
+        return False
+
+
+async def save_otp(email: str, otp: str, expiry_seconds: int = 600) -> None:
+    try:
+        await token_blocklist.set(name=f"otp:{email}", value=otp, ex=expiry_seconds)
+    except Exception as e:
+        logger.error(f"Redis Error (save_otp): {e}")
+
+
+async def get_otp(email: str) -> str | None:
+    try:
+        return await token_blocklist.get(f"otp:{email}")
+    except Exception as e:
+        logger.error(f"Redis Error (get_otp): {e}")
+        return None
+
+
+async def delete_otp(email: str) -> None:
+    try:
+        await token_blocklist.delete(f"otp:{email}")
+    except Exception as e:
+        logger.error(f"Redis Error (delete_otp): {e}")
